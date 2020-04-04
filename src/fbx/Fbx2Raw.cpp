@@ -1,10 +1,9 @@
 /**
- * Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 
 #include "Fbx2Raw.hpp"
@@ -34,6 +33,26 @@
 #include "materials/TraditionalMaterials.hpp"
 
 float scaleFactor;
+
+static std::string NativeToUTF8(const std::string& str) {
+#if _WIN32
+  char* u8cstr = nullptr;
+#if (_UNICODE || UNICODE)
+  FbxWCToUTF8(reinterpret_cast<const char*>(str.c_str()), u8cstr);
+#else
+  FbxAnsiToUTF8(str.c_str(), u8cstr);
+#endif
+  if (!u8cstr) {
+    return str;
+  } else {
+    std::string u8str = u8cstr;
+    delete[] u8cstr;
+    return u8str;
+  }
+#else
+  return str;
+#endif
+}
 
 static bool TriangleTexturePolarity(const Vec2f& uv0, const Vec2f& uv1, const Vec2f& uv2) {
   const Vec2f d0 = uv1 - uv0;
@@ -517,12 +536,12 @@ static void ReadCamera(RawModel& raw, FbxScene* pScene, FbxNode* pNode) {
       break;
     }
     case FbxCamera::EApertureMode::eHorizontal: {
-      fovx = pCamera->FieldOfViewX;
+      fovx = pCamera->FieldOfView;
       fovy = HFOV2VFOV(fovx, apertureRatio);
       break;
     }
     case FbxCamera::EApertureMode::eVertical: {
-      fovy = pCamera->FieldOfViewY;
+      fovy = pCamera->FieldOfView;
       fovx = VFOV2HFOV(fovy, 1.0 / apertureRatio);
       break;
     }
@@ -743,24 +762,58 @@ static void ReadAnimations(RawModel& raw, FbxScene* pScene, const GltfOptions& o
 
     pScene->SetCurrentAnimationStack(pAnimStack);
 
-    FbxTakeInfo* takeInfo = pScene->GetTakeInfo(animStackName);
-    if (takeInfo == nullptr) {
-      fmt::printf("Warning:: animation '%s' has no Take information. Skipping.\n", animStackName);
-      // not all animstacks have a take
-      continue;
+    /**
+     * Individual animations are often concatenated on the timeline, and the
+     * only certain way to identify precisely what interval they occupy is to
+     * depth-traverse the entire animation stack, and examine the actual keys.
+     *
+     * There is a deprecated concept of an "animation take" which is meant to
+     * provide precisely this time interval information, but the data is not
+     * actually derived by the SDK from source-of-truth data structures, but
+     * rather provided directly by the FBX exporter, and not sanity checked.
+     *
+     * Some exporters calculate it correctly. Others do not. In any case, we
+     * now ignore it completely.
+     */
+    FbxLongLong firstFrameIndex = -1;
+    FbxLongLong lastFrameIndex = -1;
+    for (int layerIx = 0; layerIx < pAnimStack->GetMemberCount(); layerIx++) {
+      FbxAnimLayer* layer = pAnimStack->GetMember<FbxAnimLayer>(layerIx);
+      for (int nodeIx = 0; nodeIx < layer->GetMemberCount(); nodeIx++) {
+        auto* node = layer->GetMember<FbxAnimCurveNode>(nodeIx);
+        FbxTimeSpan nodeTimeSpan;
+        // Multiple curves per curve node is not even supported by the SDK.
+        for (int curveIx = 0; curveIx < node->GetCurveCount(0); curveIx++) {
+          FbxAnimCurve* curve = node->GetCurve(0U, curveIx);
+          if (curve == nullptr) {
+            continue;
+          }
+          // simply take the interval as first key to last key
+          int firstKeyIndex = 0;
+          int lastKeyIndex = std::max(firstKeyIndex, curve->KeyGetCount() - 1);
+          FbxLongLong firstCurveFrame = curve->KeyGetTime(firstKeyIndex).GetFrameCount(eMode);
+          FbxLongLong lastCurveFrame = curve->KeyGetTime(lastKeyIndex).GetFrameCount(eMode);
+
+          // the final interval is the union of all node curve intervals
+          if (firstFrameIndex == -1 || firstCurveFrame < firstFrameIndex) {
+            firstFrameIndex = firstCurveFrame;
+          }
+          if (lastFrameIndex == -1 || lastCurveFrame > lastFrameIndex) {
+            lastFrameIndex = lastCurveFrame;
+          }
+        }
+      }
     }
+    RawAnimation animation;
+    animation.name = animStackName;
+
+    fmt::printf(
+        "Animation %s: [%lu - %lu]\n", std::string(animStackName), firstFrameIndex, lastFrameIndex);
+
     if (verboseOutput) {
       fmt::printf("animation %zu: %s (%d%%)", animIx, (const char*)animStackName, 0);
     }
 
-    FbxTime start = takeInfo->mLocalTimeSpan.GetStart();
-    FbxTime end = takeInfo->mLocalTimeSpan.GetStop();
-
-    RawAnimation animation;
-    animation.name = animStackName;
-
-    FbxLongLong firstFrameIndex = start.GetFrameCount(eMode);
-    FbxLongLong lastFrameIndex = end.GetFrameCount(eMode);
     for (FbxLongLong frameIndex = firstFrameIndex; frameIndex <= lastFrameIndex; frameIndex++) {
       FbxTime pTime;
       // first frame is always at t = 0.0
@@ -1040,13 +1093,26 @@ bool LoadFBXFile(
     const std::string fbxFileName,
     const std::set<std::string>& textureExtensions,
     const GltfOptions& options) {
+  std::string fbxFileNameU8 = NativeToUTF8(fbxFileName);
   FbxManager* pManager = FbxManager::Create();
+
+  if (!options.fbxTempDir.empty()) {
+    pManager->GetXRefManager().AddXRefProject("embeddedFileProject", options.fbxTempDir.c_str());
+    FbxXRefManager::sEmbeddedFileProject = "embeddedFileProject";
+    pManager->GetXRefManager().AddXRefProject("configurationProject", options.fbxTempDir.c_str());
+    FbxXRefManager::sConfigurationProject = "configurationProject";
+    pManager->GetXRefManager().AddXRefProject("localizationProject", options.fbxTempDir.c_str());
+    FbxXRefManager::sLocalizationProject = "localizationProject";
+    pManager->GetXRefManager().AddXRefProject("temporaryFileProject", options.fbxTempDir.c_str());
+    FbxXRefManager::sTemporaryFileProject = "temporaryFileProject";
+  }
+
   FbxIOSettings* pIoSettings = FbxIOSettings::Create(pManager, IOSROOT);
   pManager->SetIOSettings(pIoSettings);
 
   FbxImporter* pImporter = FbxImporter::Create(pManager, "");
 
-  if (!pImporter->Initialize(fbxFileName.c_str(), -1, pManager->GetIOSettings())) {
+  if (!pImporter->Initialize(fbxFileNameU8.c_str(), -1, pManager->GetIOSettings())) {
     if (verboseOutput) {
       fmt::printf("%s\n", pImporter->GetStatus().GetErrorString());
     }

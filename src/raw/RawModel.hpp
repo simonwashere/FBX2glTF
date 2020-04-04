@@ -1,10 +1,9 @@
 /**
- * Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 
 #pragma once
@@ -30,9 +29,9 @@ enum RawVertexAttribute {
 };
 
 struct RawBlendVertex {
-  Vec3f position{};
-  Vec3f normal{};
-  Vec4f tangent{};
+  Vec3f position{0.0f};
+  Vec3f normal{0.0f};
+  Vec4f tangent{0.0f};
 
   bool operator==(const RawBlendVertex& other) const {
     return position == other.position && normal == other.normal && tangent == other.tangent;
@@ -40,8 +39,6 @@ struct RawBlendVertex {
 };
 
 struct RawVertex {
-  RawVertex() : polarityUv0(false), pad1(false), pad2(false), pad3(false) {}
-
   Vec3f position{0.0f};
   Vec3f normal{0.0f};
   Vec3f binormal{0.0f};
@@ -58,12 +55,12 @@ struct RawVertex {
   int blendSurfaceIx = -1;
   // the size of this vector is always identical to the size of the corresponding
   // RawSurface.blendChannels
-  std::vector<RawBlendVertex> blends{};
+  std::vector<RawBlendVertex> blends;
 
-  bool polarityUv0;
-  bool pad1;
-  bool pad2;
-  bool pad3;
+  bool polarityUv0 = false;
+  bool pad1 = false;
+  bool pad2 = false;
+  bool pad3 = false;
 
   bool operator==(const RawVertex& other) const;
   size_t Difference(const RawVertex& other) const;
@@ -71,14 +68,7 @@ struct RawVertex {
 
 class VertexHasher {
  public:
-  size_t operator()(const RawVertex& v) const {
-    size_t seed = 5381;
-    const auto hasher = std::hash<float>{};
-    seed ^= hasher(v.position[0]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    seed ^= hasher(v.position[1]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    seed ^= hasher(v.position[2]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-    return seed;
-  }
+  size_t operator()(const RawVertex& v) const;
 };
 
 struct RawTriangle {

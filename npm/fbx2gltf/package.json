@@ -1,6 +1,6 @@
 {
   "name": "fbx2gltf",
-  "version": "0.9.6",
+  "version": "0.9.7-p1",
   "description": "Node wrapper around FBX2glTF tools.",
   "main": "index.js",
   "repository": {
@@ -19,7 +19,6 @@
   "homepage": "https://github.com/facebookincubator/FBX2glTF",
   "files": [
     "LICENSE",
-    "PATENTS",
     "README.md",
     "bin",
     "index.js"

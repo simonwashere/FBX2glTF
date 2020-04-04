@@ -1,10 +1,9 @@
 /**
- * Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 
 #include <fstream>
@@ -238,6 +237,8 @@ int main(int argc, char* argv[]) {
       ->check(CLI::Range(1, 32))
       ->group("Draco");
 
+  app.add_option("--fbx-temp-dir", gltfOptions.fbxTempDir, "Temporary directory to be used by FBX SDK.")->check(CLI::ExistingDirectory);
+
   CLI11_PARSE(app, argc, argv);
 
   bool do_flip_u = false;
@@ -291,14 +292,24 @@ int main(int argc, char* argv[]) {
 
   // the path of the actual .glb or .gltf file
   std::string modelPath;
+  const auto& suffix = FileUtils::GetFileSuffix(outputPath);
+
+  // Assume binary output if extension is glb
+  if (suffix.has_value() && suffix.value() == "glb") {
+    gltfOptions.outputBinary = true;
+  }
+
   if (gltfOptions.outputBinary) {
-    const auto& suffix = FileUtils::GetFileSuffix(outputPath);
     // add .glb to output path, unless it already ends in exactly that
     if (suffix.has_value() && suffix.value() == "glb") {
       modelPath = outputPath;
     } else {
       modelPath = outputPath + ".glb";
     }
+    // if the extension is gltf set the output folder to the parent directory
+  } else if (suffix.has_value() && suffix.value() == "gltf") {
+    outputFolder = FileUtils::getFolder(outputPath) + "/";
+    modelPath = outputPath;
   } else {
     // in gltf mode, we create a folder and write into that
     outputFolder = fmt::format("{}_out/", outputPath.c_str());

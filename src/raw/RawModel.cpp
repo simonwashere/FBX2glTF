@@ -1,10 +1,9 @@
 /**
- * Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 
 #include "RawModel.hpp"
@@ -22,6 +21,15 @@
 
 #include "utils/Image_Utils.hpp"
 #include "utils/String_Utils.hpp"
+
+size_t VertexHasher::operator()(const RawVertex& v) const {
+  size_t seed = 5381;
+  const auto hasher = std::hash<float>{};
+  seed ^= hasher(v.position[0]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+  seed ^= hasher(v.position[1]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+  seed ^= hasher(v.position[2]) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+  return seed;
+}
 
 bool RawVertex::operator==(const RawVertex& other) const {
   return (position == other.position) && (normal == other.normal) && (tangent == other.tangent) &&

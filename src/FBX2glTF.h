@@ -1,10 +1,9 @@
 /**
- * Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  * All rights reserved.
  *
  * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * LICENSE file in the root directory of this source tree.
  */
 
 #pragma once
@@ -18,7 +17,7 @@
 #include <Windows.h>
 #endif
 
-#define FBX2GLTF_VERSION std::string("0.9.6")
+#define FBX2GLTF_VERSION std::string("0.9.7")
 
 #include <fmt/printf.h>
 
@@ -123,4 +122,7 @@ struct GltfOptions {
   UseLongIndicesOptions useLongIndices = UseLongIndicesOptions::AUTO;
   /** Select baked animation framerate. */
   AnimationFramerateOptions animationFramerate = AnimationFramerateOptions::BAKE24;
+
+  /** Temporary directory used by FBX SDK. */
+  std::string fbxTempDir;
 };

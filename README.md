@@ -1,5 +1,7 @@
 # FBX2glTF
 
+[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+
 This is a command line tool for converting 3D model assets on Autodesk's
 venerable [FBX](https://www.autodesk.com/products/fbx/overview) format to
 [glTF 2.0](https://github.com/KhronosGroup/glTF/tree/master/specification/2.0),
@@ -8,27 +10,35 @@ a modern runtime asset delivery format.
 Precompiled binaries releases for Windows, Mac OS X and Linux may be
 found [here](https://github.com/facebookincubator/FBX2glTF/releases).
 
-Bleeding-edge binaries are periodically built and publicly available [here](https://dev.azure.com/parwinzell/FBX2glTF/): click a build (usually the most recent), then the 'Artefacts' dropdown in the upper right. 
+Bleeding-edge binaries for Windows may be found [here](https://ci.appveyor.com/project/Facebook/fbx2gltf/build/artifacts). Linux and Mac OS X to come; meanwhile, you can [build your own](#building-it-on-your-own).
+
+[![Build Status](https://travis-ci.com/facebookincubator/FBX2glTF.svg?branch=master)](https://travis-ci.com/facebookincubator/FBX2glTF)
+[![Build status](https://ci.appveyor.com/api/projects/status/5mq4vbc44vmyec4w?svg=true)](https://ci.appveyor.com/project/Facebook/fbx2gltf)
 
 ## Running
 
 The tool can be invoked like so:
+
 ```
  > FBX2glTF ~/models/butterfly.fbx
 ```
 
 Or perhaps, as part of a more complex pipeline:
+
 ```
  > FBX2glTF --binary --draco --verbose \
           --input ~/models/source/butterfly.fbx \
           --output ~/models/target/butterfly.glb
 ```
 
+There are also some friendly & hands-on instructions available [over at Facebook](https://developers.facebook.com/docs/sharing/3d-posts/glb-tutorials/#convert-from-fbx).
+
 ### CLI Switches
 
 You can always run the binary with --help to see what options it takes:
+
 ```
-FBX2glTF 0.9.6: Generate a glTF 2.0 representation of an FBX model.
+FBX2glTF 0.9.7: Generate a glTF 2.0 representation of an FBX model.
 Usage: FBX2glTF [OPTIONS] [FBX Model]
 
 Positionals:
@@ -58,6 +68,7 @@ Options:
   --blend-shape-tangents      Include blend shape tangents, if reported present by the FBX SDK.
   -k,--keep-attribute (position|normal|tangent|binormial|color|uv0|uv1|auto) ...
                               Used repeatedly to build a limiting set of vertex attributes to keep.
+  --fbx-temp-dir DIR          Temporary directory to be used by FBX SDK.
 
 
 Materials:
@@ -99,7 +110,7 @@ Some of these switches are not obvious:
 - `--compute-normals` controls when automatic vertex normals should be computed
   from the mesh. By default, empty normals (which are forbidden by glTF) are
   replaced. A choice of 'missing' implies 'broken', but additionally creates
-  normals for models that lack them completely. 
+  normals for models that lack them completely.
 - `--no-flip-v` will actively disable v coordinat flipping. This can be useful
   if your textures are pre-flipped, or if for some other reason you were already
   in a glTF-centric texture coordinate system.
@@ -109,7 +120,7 @@ Some of these switches are not obvious:
   will be chosen by default if you supply none of the others. Material switches
   are documented further below.
 - If you supply any `-keep-attribute` option, you enable a mode wherein you must
-  supply it repeatedly to list *all* the vertex attributes you wish to keep in
+  supply it repeatedly to list _all_ the vertex attributes you wish to keep in
   the conversion process. This is a way to trim the size of the resulting glTF
   if you know the FBX contains superfluous attributes. The supported arguments
   are `position`, `normal`, `tangent`, `color`, `uv0`, and `uv1`.
@@ -123,8 +134,6 @@ Some of these switches are not obvious:
 
 ## Building it on your own
 
-Building FBX2glTF has become slightly more ornery because <TODO> explanation.
-
 We currently depend on the open source projects
 [Draco](https://github.com/google/draco),
 [MathFu](https://github.com/google/mathfu),
@@ -135,25 +144,55 @@ We currently depend on the open source projects
 and [fmt](https://github.com/fmtlib/fmt);
 all of which are automatically downloaded and/or built.
 
-You must however manually download and install the
-[Autodesk FBX SDK](https://www.autodesk.com/products/fbx/overview) and
-accept its license agreement.
-
 **At present, only version 2019.2 of the FBX SDK is supported**. The
 build system will not successfully locate any other version.
 
 ### Linux and MacOS X
-Compilation on Unix machines might look like:
+
+Your development environment will need to have:
+
+- build essentials (gcc for Linux, clang for Mac)
+- cmake
+- python 3.\* and associated pip3/pip command
+- zstd
+
+Then, compilation on Unix machines will look something like:
 
 ```
-    <TODO>
+# Determine SDK location & build settings for Linux vs (Recent) Mac OS X
+> if [[ "$OSTYPE" == "darwin"* ]]; then
+    export CONAN_CONFIG="-s compiler=apple-clang -s compiler.version=10.0 -s compiler.libcxx=libc++"
+    export FBXSDK_TARBALL="https://github.com/zellski/FBXSDK-Darwin/archive/2019.2.tar.gz"
+elif [[ "$OSTYPE" == "linux"* ]]; then
+    export CONAN_CONFIG="-s compiler.libcxx=libstdc++11"
+    export FBXSDK_TARBALL="https://github.com/zellski/FBXSDK-Linux/archive/2019.2.tar.gz"
+else
+    echo "This snippet only handles Mac OS X and Linux."
+fi
+
+# Fetch Project
+> git clone https://github.com/facebookincubator/FBX2glTF.git
+> cd FBX2glTF
+
+# Fetch and unpack FBX SDK
+> curl -sL "${FBXSDK_TARBALL}" | tar xz --strip-components=1 --include */sdk/
+# Then decompress the contents
+> zstd -d -r --rm sdk
+
+# Install and configure Conan, if needed
+> pip3 install conan # or sometimes just "pip"; you may need to install Python/PIP
+> conan remote add --force bincrafters https://api.bintray.com/conan/bincrafters/public-conan
+
+# Initialize & run build
+> conan install . -i build -s build_type=Release ${CONAN_CONFIG}
+> conan build . -bf build
 ```
 
-If all goes well, you will end up with a statically linked executable.
+If all goes well, you will end up with a statically linked executable in `./build/FBX2glTF`.
 
 ### Windows
 
-<TODO> this needs updating
+<TODO> the below is out of date
 
 Windows users may [download](https://cmake.org/download) CMake for Windows,
 install it and [run it](https://cmake.org/runningcmake/) on the FBX2glTF
@@ -165,10 +204,11 @@ versions of the IDE are unlikely to successfully build the tool.
 
 Note that the `CMAKE_BUILD_TYPE` variable from the Unix Makefile system is
 entirely ignored here; it is when you open the generated solution that
-you will be choose one of the canonical build types — *Debug*,
-*Release*, *MinSizeRel*, and so on.
+you will be choose one of the canonical build types — _Debug_,
+_Release_, _MinSizeRel_, and so on.
 
 ## Conversion Process
+
 The actual translation begins with the FBX SDK parsing the input file, and ends
 with the generation of the descriptive `JSON` that forms the core of glTF, along
 with binary buffers that hold geometry and animations (and optionally also
@@ -180,13 +220,14 @@ process happens in reverse when we construct meshes and materials that conform
 to the expectations of the glTF format.
 
 ### Animations
+
 Every animation in the FBX file becomes an animation in the glTF file. The
 method used is one of "baking": we step through the interval of time spanned by
 the animation, keyframe by keyframe, calculate the local transform of each
 node, and whenever we find any node that's rotated, translated or scaled, we
 record that fact in the output.
 
-Beyond skeleton-based animation, *Blend Shapes* are also supported; they are
+Beyond skeleton-based animation, _Blend Shapes_ are also supported; they are
 read from the FBX file on a per-mesh basis, and clips can use them by varying
 the weights associated with each one.
 
@@ -195,6 +236,7 @@ drawback of creating potentially very large files. The more complex the
 animation rig, the less avoidable this data explosion is.
 
 There are three future enhancements we hope to see for animations:
+
 - Version 2.0 of glTF brought us support for expressing quadratic animation
   curves, where previously we had only had linear. Not coincidentally, quadratic
   splines are one of the key ways animations are expressed inside the FBX. When
@@ -224,33 +266,37 @@ old workflow often contain baked lighting of the type that would arise naturally
 in a PBR environment.
 
 Some material settings remain well supported and transfer automatically:
- - Emissive constants and textures
- - Occlusion maps
- - Normal maps
+
+- Emissive constants and textures
+- Occlusion maps
+- Normal maps
 
 This leaves the other traditional settings, first of Lambert:
- - Ambient — this is anathema in the PBR world, where such effects should
-   emerge naturally from the fundamental colour of the material and any ambient
-   lighting present.
- - Diffuse — the material's direction-agnostic, non-specular reflection,
-and additionally, with Blinn/Phong:
- - Specular — a more polished material's direction-sensitive reflection,
- - Shininess — just how polished the material is; a higher value here yields a
-   more mirror-like surface.
+
+- Ambient — this is anathema in the PBR world, where such effects should
+  emerge naturally from the fundamental colour of the material and any ambient
+  lighting present.
+- Diffuse — the material's direction-agnostic, non-specular reflection,
+  and additionally, with Blinn/Phong:
+- Specular — a more polished material's direction-sensitive reflection,
+- Shininess — just how polished the material is; a higher value here yields a
+  more mirror-like surface.
 
 (All these can be either constants or textures.)
 
 #### Exporting as Unlit
+
 If you have a model was constructed using an unlit workflow, e.g. a photogrammetry
 capture or a landscape with careful baked-in lighting, you may choose to export
 it using the --khr-materials-common switch. This incurs a dependency on the glTF
-extension 'KHR_materials_unlit; a client that accepts  that extension is making
+extension 'KHR_materials_unlit; a client that accepts that extension is making
 a promise it'll do its best to render pixel values without lighting calculations.
 
 **Note that at the time of writing, this glTF extension is still undergoing the
 ratification process**
 
 #### Exporting as Metallic-Roughness PBR
+
 Given the command line flag --pbr-metallic-roughness, we throw ourselves into
 the warm embrace of glTF 2.0's PBR preference.
 
@@ -263,6 +309,7 @@ that route should be digested propertly by FBX2glTF.
 when hooked up to Maya.)
 
 ## Draco Compression
+
 The tool will optionally apply [Draco](https://github.com/google/draco)
 compression to the geometric data of each mesh (vertex indices, positions,
 normals, per-vertex color, and so on). This can be dramatically effective
@@ -276,16 +323,18 @@ viewer that is willing and able to decompress the data.
 ratification process.**
 
 ## Future Improvements
+
 This tool is under continuous development. We do not have a development roadmap
 per se, but some aspirations have been noted above. The canonical list of active
 TODO items can be found
 [on GitHub](https://github.com/facebookincubator/FBX2glTF/labels/enhancement).
 
-
 ## Authors
- - Pär Winzell
- - J.M.P. van Waveren
- - Amanda Watson
+
+- Pär Winzell
+- J.M.P. van Waveren
+- Amanda Watson
 
 ## License
-FBX2glTF is BSD-licensed. We also provide an additional patent grant.
+
+FBX2glTF is licensed under the [3-clause BSD license](LICENSE).
